@@ -63,7 +63,7 @@
   * @{
   */
 
-#define USBD_VID                      1155
+#define USBD_VID                      0XAFF1
 #define USBD_LANGID_STRING            1033
 #define USBD_MANUFACTURER_STRING      "STMicroelectronics"
 #if (USBD_USE_DFU == 1)

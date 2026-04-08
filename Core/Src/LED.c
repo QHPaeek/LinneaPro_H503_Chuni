@@ -1,11 +1,13 @@
 #include "LED.h"
 #include "stdio.h"
+#include "stdbool.h"
 #include "air_string.h"
+#include "system_mode.h"
 
 #define NUM_LED 31
 #define AIR_NUM_LED 16
-#define WS2812_HIGH 208
-#define WS2812_LOW 104
+#define WS2812_HIGH 200
+#define WS2812_LOW 90
 #define WS2812_TIM_HANDLE &htim2
 #define WS2812_TIM_CH TIM_CHANNEL_1
 #define AIR_LED_CHANNEL 6
@@ -13,10 +15,12 @@
 uint8_t RGB_data[3 * NUM_LED];
 static uint8_t RGB_data_DMA_buffer[64 + NUM_LED * 24 + 64] = {WS2812_HIGH + WS2812_LOW};
 static uint8_t Air_RGB_data[3 * AIR_NUM_LED] = {0xff};
-static uint8_t Air_RGB_data_DMA_buffer[64 + AIR_NUM_LED * 24 + 64] = {WS2812_HIGH + WS2812_LOW};
+static uint8_t Air_RGB_data_DMA_buffer[AIR_NUM_LED * 24 + 64 + 64] = {WS2812_HIGH + WS2812_LOW};
 
 extern uint8_t rxData[128];
 extern uint32_t rxLen;
+
+bool Air_LED_flag = false;
 
 const uint8_t gamma8[256] = {
   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,
@@ -49,13 +53,16 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
     }
     if(htim->Instance == TIM3)
 	{
+    	Air_Select_Channel(7);
 		HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_1);
+		Air_LED_flag = true;
 	}
 }
 
 void LED_init(){
 	memset(RGB_data_DMA_buffer,0,64 + NUM_LED * 24 + 64);
-	memset(Air_RGB_data_DMA_buffer,0,64 + AIR_NUM_LED * 24 + 64);
+	memset(Air_RGB_data_DMA_buffer,0,AIR_NUM_LED * 24 + 64 + 64);
+	Air_Select_Channel(7);
 }
 
 void Ground_LED_set(uint8_t led_no,uint8_t r,uint8_t g,uint8_t b){
@@ -78,6 +85,14 @@ void Air_LED_set(uint8_t led_no,uint8_t r,uint8_t g,uint8_t b){
 
 void Ground_LED_refresh()
 {
+	if(sys_mode.Power_Mode == POWER_OFF){
+		for(uint16_t i = 0 ;i <NUM_LED * 24;i++)
+		{
+			RGB_data_DMA_buffer[i + 64] = WS2812_LOW;
+		}
+		HAL_TIM_PWM_Start_DMA(WS2812_TIM_HANDLE, WS2812_TIM_CH, (uint32_t *)RGB_data_DMA_buffer, NUM_LED * 24 + 64 + 64);
+		return;
+	}
 	for(uint8_t i = 0 ;i<NUM_LED;i++)
 	{
 		for(uint8_t j = 0 ;j <8;j++)
@@ -97,28 +112,44 @@ void Ground_LED_refresh()
 }
 
 void Ground_LED_Poll(){
-	if(rxLen != 0){
-		Serial_Receive_Handle(rxData, rxLen);
-	}
-	rxLen = 0;
+	Ground_LED_refresh();
+//	if(rxLen != 0){
+//		Serial_Receive_Handle(rxData, rxLen);
+//	}
+//	rxLen = 0;
 }
 
 void TIM3_Set_800K(void)
 {
-	__HAL_TIM_SET_PRESCALER(&htim3, 0);
-	__HAL_TIM_SET_AUTORELOAD(&htim3, 310);
+    //配置 38kHz 参数
+    TIM3->PSC = 0;
+    TIM3->ARR = 312;
+    TIM3->CCR1 = 0;
+
+    //更新寄存器
+    TIM3->EGR = TIM_EGR_UG;
+    TIM3->CR1 |= TIM_CR1_ARPE;
 }
 
 
 
 void Air_LED_refresh()
 {
-//	TIM3->PSC = 0;
-//	TIM3->ARR = 310;
-//	TIM3->CCR1 = 0;
-//	TIM3->EGR = TIM_EGR_UG;
 	TIM3_Set_800K();
+//	Air_RGB_data_DMA_buffer[63] = 10;
 	Air_Select_Channel(AIR_LED_CHANNEL);
+	osDelay(1);
+	Air_LED_flag = false;
+	if(sys_mode.Power_Mode == POWER_OFF){
+		for(uint16_t i = 0 ;i< AIR_NUM_LED * 24;i++)
+		{
+			Air_RGB_data_DMA_buffer[i + 64] = WS2812_LOW;
+		}
+		HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)Air_RGB_data_DMA_buffer, AIR_NUM_LED * 24 + 64 + 64);
+		HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)Air_RGB_data_DMA_buffer, AIR_NUM_LED * 24 + 64 + 64);
+		Air_Select_Channel(AIR_LED_CHANNEL);
+		return;
+	}
 	for(uint8_t i = 0 ;i<AIR_NUM_LED;i++)
 	{
 		for(uint8_t j = 0 ;j <8;j++)
@@ -134,15 +165,15 @@ void Air_LED_refresh()
 			Air_RGB_data_DMA_buffer[(i*3+2)*8+j+64] = (gamma8[Air_RGB_data[i*3+2]] & (1<<(7-j))) ? WS2812_HIGH:WS2812_LOW;
 		}
 	}
-	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)Air_RGB_data_DMA_buffer, AIR_NUM_LED * 24 + 64 + 64);
 	HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)Air_RGB_data_DMA_buffer, AIR_NUM_LED * 24 + 64 + 64);
+	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t *)Air_RGB_data_DMA_buffer, AIR_NUM_LED * 24 + 64 + 64);
 }
 
 void Air_LED_show(uint8_t r,uint8_t g,uint8_t b){
 	for(uint8_t i = 0;i<AIR_NUM_LED;i++){
 		Air_LED_set(i,gamma8[r],gamma8[g],gamma8[b]);
 	}
-	Air_LED_refresh();
+//	Air_LED_refresh();
 }
 
 void Ground_LED_show(uint8_t r,uint8_t g,uint8_t b){
@@ -151,3 +182,4 @@ void Ground_LED_show(uint8_t r,uint8_t g,uint8_t b){
 	}
 	Ground_LED_refresh();
 }
+

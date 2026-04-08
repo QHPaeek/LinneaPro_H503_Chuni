@@ -169,6 +169,26 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 
 }
 
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+	__HAL_UART_CLEAR_FEFLAG(huart);
+	__HAL_UART_CLEAR_OREFLAG(huart);
+    if (huart->Instance == USART1)
+    {
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_buf, UART_FRAME_LEN);
+    }
+    else if(huart->Instance == USART2){
+    	HAL_UARTEx_ReceiveToIdle_DMA(&huart2, uart2_buf, UART_FRAME_LEN);
+    }
+    else if(huart->Instance == USART3){
+    	HAL_UARTEx_ReceiveToIdle_DMA(&huart3, uart3_buf, UART_FRAME_LEN);
+    }
+    else if(huart->Instance == LPUART1){
+        HAL_UARTEx_ReceiveToIdle_DMA(&hlpuart1, lpuart1_buf, UART_FRAME_LEN);
+    }
+
+}
+
 void capsense_init()
 {
 	for(uint8_t i = 0;i<128;i++){

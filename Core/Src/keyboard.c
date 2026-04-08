@@ -32,8 +32,10 @@ void keyboard_refresh(void)
 
 void keyboard_poll(){
 	if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_13) == 0){
+		keyboard.keycode[36] = 0x3A; //F1
 		keyboard.keycode[38] = keycode_sheet['1'];
 	}else{
+		keyboard.keycode[36] = 0;
 		keyboard.keycode[38] = 0;
 	}
 	if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_14) == 0){
@@ -42,11 +44,14 @@ void keyboard_poll(){
 			check += RGB_data[i];
 		}
 		if(check){
+			keyboard.keycode[37] = 0x3C; //F3
 			keyboard.keycode[39] = keycode_sheet['3'];
 		}else{
+			keyboard.keycode[37] = 0x3B; //F2
 			keyboard.keycode[39] = keycode_sheet['2'];
 		}
 	}else{
+		keyboard.keycode[37] = 0;
 		keyboard.keycode[39] = 0;
 	}
 	keyboard_refresh();

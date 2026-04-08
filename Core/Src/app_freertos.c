@@ -25,6 +25,8 @@
 #include "string.h"
 #include "capsense.h"
 #include "tim.h"
+#include "system_mode.h"
+#include "LED.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -136,7 +138,7 @@ void StartDefaultTask(void *argument)
 		capsense_poll();
 		slider_poll();
 		keyboard_poll();
-		osDelay(1);
+		osDelay(5);
 	}
   /* USER CODE END defaultTask */
 }
@@ -152,16 +154,16 @@ void StartTask02(void *argument)
 {
   /* USER CODE BEGIN Task02 */
 	LED_init();
-//	Air_Set_38kHz();
-//	Air_Select_Channel(6);
-//		  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+	osDelay(100);
+	System_Mode_Init();
   /* Infinite loop */
-	Ground_LED_show(128,128,128);
-//	Air_LED_show(128,128,128);
   for(;;)
   {
 	  Air_String_Poll();
 	  Ground_LED_Poll();
+	  osDelay(1);
+	  Air_LED_refresh();
+	  System_Mode_Poll();
 //	  for(uint8_t i = 0;i<6;i++){
 //		  if(Air_Trigger_Status & (1 << i)){
 //			  Air_LED_set(i,128,128,128);
@@ -174,7 +176,7 @@ void StartTask02(void *argument)
 //	  }
 //	  Ground_LED_refresh();
 //	  Air_LED_refresh();
-	  osDelay(3);
+	  osDelay(2);
   }
   /* USER CODE END Task02 */
 }

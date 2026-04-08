@@ -8,6 +8,8 @@
 #include "slider.h"
 #include "capsense.h"
 #include "stdbool.h"
+#include "gpio.h"
+#include "system_mode.h"
 
 //#define PSOC_DEBUG
 //#define AUTO_AIR
@@ -37,6 +39,19 @@ uint8_t touch_sheet[8][4] = {
 		{4,5,0,1},
 		{6,7,2,3},
 };
+
+uint8_t touch_sheet_B[8][4] = {
+		{11,10,15,14},
+		{9,8,13,12},
+		{19,18,23,22},
+		{17,16,21,20},
+		{27,26,31,30},
+		{25,24,29,28},
+		{3,2,7,6},
+		{1,0,5,4},
+};
+
+
 uint8_t slider_transfer_buf[38] = {
 		0xFF,0x01,0x21,0x00,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00
 		,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00
@@ -44,6 +59,16 @@ uint8_t slider_transfer_buf[38] = {
 		,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0xE0 ,0x00
 };
 void slider_init(){
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitStruct.Pin = GPIO_PIN_13;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+//	if(HAL_GPIO_ReadPin(GPIOA,GPIO_PIN_13)){
+//	}else{
+		memcpy(touch_sheet,touch_sheet_B,32);
+//	}
 	for(uint8_t i = 0;i<32;i++){
 		slider_status[i] = 0;
 	}
@@ -61,21 +86,33 @@ void slider_poll(){
 				}
 			}
 		}
-#ifdef AUTO_AIR
-		slider_transfer_buf[35] ++;
-		if(slider_transfer_buf[35] > 0b111111){
-			slider_transfer_buf[35] = 1;
-		}
-#else
-		slider_transfer_buf[35] = Air_Trigger_Status;
-		for(uint8_t i = 0;i<32;i++){
-			if(slider_transfer_buf[3+i] <= 39){
-				slider_transfer_buf[3+i] = 0;
+		if(sys_mode.Game_Mode == 1){
+	#ifdef AUTO_AIR
+			slider_transfer_buf[35] ++;
+			if(slider_transfer_buf[35] > 0b111111){
+				slider_transfer_buf[35] = 1;
 			}
+	#else
+			slider_transfer_buf[35] = Air_Trigger_Status;
+			for(uint8_t i = 0;i<32;i++){
+				if(slider_transfer_buf[3+i] <= 39){
+					slider_transfer_buf[3+i] = 0;
+				}
+			}
+	#endif
+			CDC_Transmit(0, slider_transfer_buf,38);
+			capsense_data_ready = 0;
 		}
-#endif
-		CDC_Transmit(0, slider_transfer_buf,38);
-		capsense_data_ready = 0;
+		else{
+			for(uint8_t i = 0;i<16;i++){
+				if((slider_transfer_buf[2*i+3] > 100) || (slider_transfer_buf[2*i+4] > 100)){
+					Ground_LED_set(2*i,255,0,128);
+				}else{
+					Ground_LED_set(2*i,0,0,128);
+				}
+			}
+//			Ground_LED_refresh();
+		}
 	}
 }
 

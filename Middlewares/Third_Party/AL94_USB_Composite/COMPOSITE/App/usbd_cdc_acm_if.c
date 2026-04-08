@@ -430,12 +430,18 @@ static int8_t CDC_Receive(uint8_t cdc_ch, uint8_t *Buf, uint32_t *Len)
 			rxData[i+64] = Buf[i];
 		}
 		rxLen += *Len;
-	}
-	else{
+		Serial_Receive_Handle(rxData, rxLen);
+	}else if(*Len == 64){
 		for( uint32_t i = 0; i < *Len; i ++ ){
-		rxData[i] = Buf[i];
+			rxData[i] = Buf[i];
 		}
 		rxLen = *Len;
+	}else{
+		for( uint32_t i = 0; i < *Len; i ++ ){
+			rxData[i] = Buf[i];
+		}
+		rxLen = *Len;
+		Serial_Receive_Handle(rxData, rxLen);
 	}
   return (USBD_OK);
   /* USER CODE END 6 */

@@ -5,6 +5,7 @@
  *      Author: Qinh
  */
 #include "serial_protocol.h"
+#include "system_mode.h"
 
 typedef enum slider_cmd {
 	SERIAL_CMD_NOP = 0,
@@ -47,10 +48,16 @@ void Serial_Receive_Handle(uint8_t* data,uint8_t len){
 	if(serial_packet.syn != 0xff)return;
 	switch(serial_packet.cmd){
 		case SERIAL_CMD_SET_LED:{
+			sys_mode.Game_Mode = 1;
 			for(uint8_t i = 0;i<31;i++){
 				Ground_LED_set(i,serial_packet.leds[i*3+1],serial_packet.leds[i*3+2],serial_packet.leds[i*3]);
 			}
 			Ground_LED_refresh();
+			break;
+		}
+		case SERIAL_CMD_SET_AIR_LED:{
+			sys_mode.Game_Mode = 1;
+			Air_LED_show(serial_packet.air_leds[1],serial_packet.air_leds[2],serial_packet.air_leds[0]);
 			break;
 		}
 		default:
