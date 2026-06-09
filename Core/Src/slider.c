@@ -11,17 +11,14 @@
 #include "gpio.h"
 #include "system_mode.h"
 
-//#define PSOC_DEBUG
 //#define AUTO_AIR
 
-#ifdef PSOC_DEBUG
 typedef union{
-    float raw_data_fl[2];
-    uint8_t raw_data_u8[8];
+    float raw_data_fl[3];
+    uint8_t raw_data_u8[12];
 }vofa;
 
 vofa vofa1;
-#endif
 
 uint8_t debug_channel = 0;
 
@@ -105,7 +102,7 @@ void slider_poll(){
 		}
 		else{
 			for(uint8_t i = 0;i<16;i++){
-				if((slider_transfer_buf[2*i+3] > 100) || (slider_transfer_buf[2*i+4] > 100)){
+				if((slider_transfer_buf[2*i+3] > 60) || (slider_transfer_buf[2*i+4] > 60)){
 					Ground_LED_set(2*i,255,0,128);
 				}else{
 					Ground_LED_set(2*i,0,0,128);
@@ -116,30 +113,37 @@ void slider_poll(){
 	}
 }
 
-#ifdef PSOC_DEBUG
-
 void slider_poll_debug(){
 	if(capsense_data_ready == 0xf){
-
 		vofa1.raw_data_fl[0] = Touch.channel_raw[debug_channel];
 		vofa1.raw_data_fl[1] = capsense_baseline[debug_channel];
-		uint8_t tmp[12] = {0,0,0,0,0,0,0,0,0,0,0x80,0x7f};
-		memcpy(tmp,vofa1.raw_data_u8,8);
-		CDC_Transmit(0, tmp,12);
+		vofa1.raw_data_fl[2] = capsense_touch_status[debug_channel];
+		uint8_t tmp[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x80,0x7f};
+		memcpy(tmp,vofa1.raw_data_u8,12);
+		CDC_Transmit(0, tmp,16);
 		capsense_data_ready = 0;
 	}
 }
-#endif
 
 bool tap_status[4][32];
 void slider_poll_idle(){
 	if(capsense_data_ready == 0xf){
-
-//		vofa1.raw_data_fl[0] = Touch.channel_raw[debug_channel];
-//		vofa1.raw_data_fl[1] = capsense_baseline[debug_channel];
-//		uint8_t tmp[12] = {0,0,0,0,0,0,0,0,0,0,0x80,0x7f};
-//		memcpy(tmp,vofa1.raw_data_u8,8);
-//		CDC_Transmit(0, tmp,12);
-//		capsense_data_ready = 0;
+		for(uint8_t i = 0;i<4;i++){ // senser
+			for(uint8_t j = 0;j<8;j++){ //button
+				slider_transfer_buf[3+i*8+j] = 0;
+				for(uint8_t k = 0;k<4;k++){ //tap
+					if(capsense_touch_status[touch_sheet[j][k] + i*32] > slider_transfer_buf[3+i*8+j]){
+						slider_transfer_buf[3+i*8+j] = capsense_touch_status[touch_sheet[j][k] + i*32];
+					}
+				}
+			}
+		}
+		for(uint8_t i = 0;i<16;i++){
+			if((slider_transfer_buf[2*i+3] > 100) || (slider_transfer_buf[2*i+4] > 100)){
+				Ground_LED_set(2*i,255,0,128);
+			}else{
+				Ground_LED_set(2*i,0,0,128);
+			}
+		}
 	}
 }

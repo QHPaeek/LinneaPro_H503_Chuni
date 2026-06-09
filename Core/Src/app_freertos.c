@@ -136,7 +136,17 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
 	for(;;){
 		capsense_poll();
-		slider_poll();
+		switch(sys_mode.Game_Mode){
+		case 1:
+			slider_poll();
+			break;
+		case 2:
+			slider_poll_debug();
+			break;
+		default:
+			slider_poll_idle();
+			break;
+		}
 		keyboard_poll();
 		osDelay(5);
 	}
@@ -176,7 +186,7 @@ void StartTask02(void *argument)
 //	  }
 //	  Ground_LED_refresh();
 //	  Air_LED_refresh();
-	  osDelay(2);
+	  osDelay(10);
   }
   /* USER CODE END Task02 */
 }

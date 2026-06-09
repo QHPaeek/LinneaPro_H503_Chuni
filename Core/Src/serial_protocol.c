@@ -17,6 +17,7 @@ typedef enum slider_cmd {
 	SERIAL_CMD_AUTO_AIR_START = 0x06,
 	SERIAL_CMD_SET_AIR_LED = 0x07,
 	SERIAL_CMD_RESET = 0x10,
+	SERIAL_CMD_DEBUG = 0xAF,
 } slider_cmd_t;
 
 typedef union serial_packet {
@@ -59,6 +60,14 @@ void Serial_Receive_Handle(uint8_t* data,uint8_t len){
 			sys_mode.Game_Mode = 1;
 			Air_LED_show(serial_packet.air_leds[1],serial_packet.air_leds[2],serial_packet.air_leds[0]);
 			break;
+		}
+		case SERIAL_CMD_DEBUG:{
+			sys_mode.Game_Mode = 2;
+			for(uint8_t i = 0;i<31;i++){
+				Ground_LED_set(i,128,128,0);
+			}
+			Ground_LED_refresh();
+			debug_channel = serial_packet.data[3];
 		}
 		default:
 			break;

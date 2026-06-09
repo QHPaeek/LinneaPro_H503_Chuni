@@ -10,6 +10,8 @@
 
 #include "stdint.h"
 
+extern uint8_t debug_channel;
+
 void Serial_Receive_Handle(uint8_t* data,uint8_t len);
 
 #endif /* INC_SERIAL_PROTOCOL_H_ */
