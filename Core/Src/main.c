@@ -20,6 +20,7 @@
 #include "main.h"
 #include "cmsis_os2.h"
 #include "adc.h"
+#include "crc.h"
 #include "gpdma.h"
 #include "lptim.h"
 #include "usart.h"
@@ -107,6 +108,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   MX_TIM3_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
   MX_USB_DEVICE_Init();
   /* USER CODE END 2 */

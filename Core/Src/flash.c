@@ -1,68 +1,245 @@
+#include "eeprom_emul.h"
+#include "stdint.h"
+#include "usbd_def.h"
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
 #include "flash.h"
-#include "string.h"
-#include "stm32h5xx_hal.h"
+#include "capsense.h"
 
-#define FLASH_SAVE_ADDR    0x0801C000U  // 扇区7起始地址，确保不在代码区
-#define FLASH_SECTOR       FLASH_SECTOR_7
+extern uint16_t capsense_maxmium[128];
+extern uint8_t capsense_sava_flag[128];
 
-#define FLASH_DATA_SIZE      sizeof(FlashData)
-#define FLASH_QUADWORD_SIZE  16U
-// 向上取整到16字节的倍数
-#define FLASH_QUADWORD_NUM   (sizeof(FlashData) / 16)
+/************************************************
+ * STM32H503 Flash EEPROM Emulation
+ ************************************************/
 
-// 全局工作副本
-FlashData Flash;
+/************************************************
+ * RAM镜像
+ ************************************************/
 
-void Flash_Save(FlashData *data)
+EEPROM_DATA_t g_eeprom;
+
+
+/************************************************
+ * CRC16
+ ************************************************/
+
+static uint16_t EEPROM_CalcCRC(uint8_t *buf,uint32_t len)
 {
-	__disable_irq();
-    HAL_StatusTypeDef status;
+    uint16_t crc = 0xFFFF;
 
-    // 1. 解锁
-    HAL_FLASH_Unlock();
-
-    // 2. 擦除扇区
-    FLASH_EraseInitTypeDef EraseInit = {0};
-    uint32_t SectorError = 0;
-
-    EraseInit.TypeErase = FLASH_TYPEERASE_SECTORS;
-    EraseInit.Banks     = FLASH_BANK_1;
-    EraseInit.Sector    = FLASH_SECTOR;
-    EraseInit.NbSectors = 1;
-
-    status = HAL_FLASHEx_Erase(&EraseInit, &SectorError);
-    if (status != HAL_OK)
+    while(len--)
     {
-        // 擦除失败，直接上锁并返回
-        HAL_FLASH_Lock();
-        return;
-    }
+        crc ^= *buf++;
 
-    // 3. 按四字（16字节）写入
-    uint32_t flash_addr = FLASH_SAVE_ADDR;
-    // 将 FlashData 看作 uint32_t 数组，每4个uint32_t为一组四字
-    uint32_t *src = (uint32_t *)data;
-
-    for (uint32_t i = 0; i < FLASH_QUADWORD_NUM; i++)
-    {
-        // 关键修正：把src[i*4]这个“值”传进去，而不是地址
-        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_QUADWORD,
-                                   flash_addr,
-                                   src[i * 4]);  // 这里直接传值
-        if (status != HAL_OK)
+        for(uint8_t i=0;i<8;i++)
         {
-            break;
+            if(crc & 1)
+                crc = (crc >> 1) ^ 0xA001;
+            else
+                crc >>= 1;
         }
-        flash_addr += FLASH_QUADWORD_SIZE;
     }
 
-    // 4. 上锁
-    HAL_FLASH_Lock();
-    __enable_irq();
+    return crc;
 }
 
-void Flash_Load(FlashData *data)
+
+/************************************************
+ * Sector计算
+ ************************************************/
+
+static uint32_t GetSector(uint32_t Address)
 {
-    // 直接内存拷贝，读Flash和读RAM一样
-    memcpy(data, (const void *)FLASH_SAVE_ADDR, sizeof(FlashData));
+    uint32_t sector;
+
+    if((Address >= FLASH_BASE) &&
+       (Address < FLASH_BASE + FLASH_BANK_SIZE))
+    {
+        sector =
+            (Address - FLASH_BASE)
+            / FLASH_SECTOR_SIZE;
+    }
+    else
+    {
+        sector =
+            ((Address - FLASH_BASE)
+             - FLASH_BANK_SIZE)
+            / FLASH_SECTOR_SIZE;
+    }
+
+    return sector;
+}
+
+
+/************************************************
+ * Bank计算
+ ************************************************/
+
+static uint32_t GetBank(uint32_t Addr)
+{
+    if(Addr < (FLASH_BASE + FLASH_BANK_SIZE))
+    {
+        return FLASH_BANK_1;
+    }
+
+    return FLASH_BANK_2;
+}
+
+
+/************************************************
+ * 擦除EEPROM Sector
+ ************************************************/
+
+static HAL_StatusTypeDef EEPROM_EraseSector(void)
+{
+    FLASH_EraseInitTypeDef erase;
+
+    uint32_t sector_error;
+
+    erase.TypeErase = FLASH_TYPEERASE_SECTORS;
+
+    erase.Banks =
+        GetBank(EEPROM_FLASH_ADDR);
+
+    erase.Sector =
+        GetSector(EEPROM_FLASH_ADDR);
+
+    erase.NbSectors = 1;
+
+    return HAL_FLASHEx_Erase(
+                &erase,
+                &sector_error);
+}
+
+/************************************************
+ * 保存到Flash
+ ************************************************/
+
+HAL_StatusTypeDef EEPROM_Save(void)
+{
+    HAL_StatusTypeDef ret;
+
+    uint32_t addr;
+
+    uint8_t *src;
+
+    g_eeprom.crc =EEPROM_CalcCRC((uint8_t *)&g_eeprom,sizeof(EEPROM_DATA_t)- sizeof(uint16_t));
+
+    HAL_FLASH_Unlock();
+
+//    if(HAL_ICACHE_Disable()!=HAL_OK)
+//    {
+//        HAL_FLASH_Lock();
+//        return HAL_ERROR;
+//    }
+
+    ret = EEPROM_EraseSector();
+
+    if(ret != HAL_OK)
+    {
+//        HAL_ICACHE_Enable();
+        HAL_FLASH_Lock();
+        return ret;
+    }
+
+    addr = EEPROM_FLASH_ADDR;
+
+    src = (uint8_t *)&g_eeprom;
+
+    while(addr < EEPROM_FLASH_ADDR + sizeof(EEPROM_DATA_t)){
+        ret = HAL_FLASH_Program(FLASH_TYPEPROGRAM_QUADWORD,addr,(uint32_t)src);
+        if(ret != HAL_OK){
+//            HAL_ICACHE_Enable();
+            HAL_FLASH_Lock();
+
+            return ret;
+        }
+
+        addr += 16;
+        src  += 16;
+    }
+
+//    HAL_ICACHE_Enable();
+
+    HAL_FLASH_Lock();
+    return HAL_OK;
+}
+
+/************************************************
+ * 从Flash读取
+ ************************************************/
+
+uint8_t EEPROM_Load(void)
+{
+    EEPROM_DATA_t *flash = (EEPROM_DATA_t *)EEPROM_FLASH_ADDR;
+    memcpy(&g_eeprom,flash,sizeof(EEPROM_DATA_t));
+    if(g_eeprom.magic != EEPROM_MAGIC){
+        memset(&g_eeprom,0,sizeof(g_eeprom));
+        g_eeprom.magic = EEPROM_MAGIC;
+        EEPROM_Save();
+    	capsense_maxmium[0] = 65454;
+        return 0;
+    }
+
+	capsense_maxmium[0] = 65252;
+	return 1;
+}
+
+/************************************************
+ * 读一个参数
+ ************************************************/
+
+uint16_t EEPROM_Read(uint16_t index)
+{
+    if(index >= EEPROM_ITEM_COUNT)
+    {
+        return 0;
+    }
+
+    return g_eeprom.data[index];
+}
+
+
+/************************************************
+ * 写一个参数
+ ************************************************/
+
+HAL_StatusTypeDef EEPROM_Write(
+        uint16_t index,
+        uint16_t value)
+{
+    if(index >= EEPROM_ITEM_COUNT)
+    {
+        return HAL_ERROR;
+    }
+
+    g_eeprom.data[index] = value;
+
+    return EEPROM_Save();
+}
+
+
+/************************************************
+ * 获取RAM缓存指针
+ ************************************************/
+
+uint16_t* EEPROM_GetBuffer(void)
+{
+    return g_eeprom.data;
+}
+
+void App_EEPROM_Save(){
+	uint8_t ret = 0;
+	for(uint8_t i = 0;i<128;i++){
+		if(capsense_sava_flag[i]){
+			g_eeprom.data[i] = capsense_maxmium[i];
+			capsense_sava_flag[i] = 0;
+			ret++;
+		}
+	}
+	if(ret){
+		EEPROM_Save();
+	}
 }

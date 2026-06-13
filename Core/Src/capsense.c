@@ -15,7 +15,7 @@
 #define CAPSENSE_BASELINE_VARIANCE 255
 #define CAPSENSE_LOW_BASELINE_DURATION_A 20
 #define CAPSENSE_LOW_BASELINE_DURATION_B 400
-#define CAPSENSE_SENS_FACTOR 0.06
+#define CAPSENSE_BSLN_SENS_FACTOR 0.03
 
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
@@ -26,8 +26,6 @@ extern DMA_HandleTypeDef handle_GPDMA1_Channel0;
 extern DMA_HandleTypeDef handle_GPDMA1_Channel1;
 extern DMA_HandleTypeDef handle_GPDMA1_Channel2;
 extern DMA_HandleTypeDef handle_GPDMA1_Channel3;
-
-extern FlashData Flash;
 
 uint8_t uart1_buf[UART_FRAME_LEN];
 uint8_t uart2_buf[UART_FRAME_LEN];
@@ -48,6 +46,9 @@ uint8_t uart_data_ready[4] = {0,0,0,0};
 uint16_t capsense_minimum_baseline[128];
 uint8_t capsense_low_bsln_flag[128];
 uint16_t capsense_maxmium[128];
+uint8_t capsense_sava_flag[128];
+
+extern EEPROM_DATA_t g_eeprom;
 
 bool check_sum(uint8_t* data){
 	uint8_t checksum = 0;
@@ -132,6 +133,8 @@ void capsense_init()
 		capsense_minimum_baseline[i] = 0xffff;
 		capsense_low_bsln_flag[i] = 0;
 		capsense_baseline[i] = 0xffff;
+		capsense_sava_flag[i] = 0;
+		capsense_maxmium[i] = 0;
 	}
 //	Flash_Load(&Flash);
 
@@ -146,35 +149,51 @@ void capsense_init()
     __HAL_DMA_DISABLE_IT(&handle_GPDMA1_Channel2, DMA_IT_HT);
     __HAL_DMA_DISABLE_IT(&handle_GPDMA1_Channel3, DMA_IT_HT);
 
+
     osDelay(100);
-    if(capsense_data_ready == 0)return;
-    for(uint8_t j = 0;j<100;j++){
-    	while(capsense_data_ready != 0xf);
-		for(uint8_t i = 0;i<128;i++){
-			if(capsense_minimum_baseline[i] > Touch.channel_raw[i]){
-				capsense_minimum_baseline[i] = Touch.channel_raw[i];
+    while(capsense_data_ready == 0);
+    if(EEPROM_Load() == 1){
+    	for(uint8_t i = 0;i<128;i++){
+    		capsense_maxmium[i] = g_eeprom.data[i];
+    	}
+		for(uint8_t j = 0;j<100;j++){
+			while(capsense_data_ready != 0xf);
+			for(uint8_t i = 0;i<128;i++){
+				if(capsense_minimum_baseline[i] > Touch.channel_raw[i]){
+					capsense_minimum_baseline[i] = Touch.channel_raw[i];
+				}
 			}
+			capsense_data_ready = 0;
 		}
-		capsense_data_ready = 0;
+    }else{
+		for(uint8_t j = 0;j<100;j++){
+			while(capsense_data_ready != 0xf);
+			for(uint8_t i = 0;i<128;i++){
+				if(capsense_minimum_baseline[i] > Touch.channel_raw[i]){
+					capsense_minimum_baseline[i] = Touch.channel_raw[i];
+				}
+				if(capsense_maxmium[i] < Touch.channel_raw[i]){
+					capsense_maxmium[i] = Touch.channel_raw[i];
+					capsense_sava_flag[i] = 1;
+				}
+			}
+			capsense_data_ready = 0;
+		}
     }
-	for(uint8_t i = 0;i<128;i++){
-		capsense_maxmium[i] = capsense_minimum_baseline[i] + 2500;
-	}
 }
 
 void capsense_poll(){
 	if(capsense_data_ready != 0xf){
 		return;
 	}
-	uint8_t flash_sava_flag = 0;
 	for(uint8_t i = 0;i<128;i++){
 		uint16_t raw = Touch.channel_raw[i];
 		if(capsense_minimum_baseline[i] > raw){
 			capsense_minimum_baseline[i] = raw;
 		}
-		if(Flash.capsense_maxmium[i] < raw){
-			Flash.capsense_maxmium[i] = raw;
-			flash_sava_flag = 1;
+		if(capsense_maxmium[i] < raw){
+			capsense_maxmium[i] = raw;
+			capsense_sava_flag[i] = 1;
 		}
 		if(capsense_baseline[i] == 0){
 			capsense_baseline[i] = raw;
@@ -184,15 +203,15 @@ void capsense_poll(){
 		}else if(raw > capsense_baseline[i] - 200){
 			capsense_low_bsln_flag[i] = 0;
 			if(capsense_baseline[i] < raw){
-				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_SENS_FACTOR)) + (raw * CAPSENSE_SENS_FACTOR);
+				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_BSLN_SENS_FACTOR)) + (raw * CAPSENSE_BSLN_SENS_FACTOR);
 				capsense_low_baseline_duration[i] = 0;
 			}else if(capsense_low_baseline_duration[i] < CAPSENSE_LOW_BASELINE_DURATION_A){
 				capsense_low_baseline_duration[i]++;
 			}else if((capsense_low_baseline_duration[i] > CAPSENSE_LOW_BASELINE_DURATION_A) & (capsense_low_baseline_duration[i] < CAPSENSE_LOW_BASELINE_DURATION_B)){
-				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_SENS_FACTOR)) + (raw * CAPSENSE_SENS_FACTOR);
+				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_BSLN_SENS_FACTOR)) + (raw * CAPSENSE_BSLN_SENS_FACTOR);
 				capsense_low_baseline_duration[i]++;
 			}else{
-				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_SENS_FACTOR)) + (raw * CAPSENSE_SENS_FACTOR);
+				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_BSLN_SENS_FACTOR)) + (raw * CAPSENSE_BSLN_SENS_FACTOR);
 //				capsense_minimum_baseline[i] = Touch.channel_raw[i];
 			}
 		}else{
@@ -225,7 +244,7 @@ void capsense_poll(){
 //		}
 //		if(capsense_baseline[i] > 60000)capsense_baseline[i] = 60000;
 //		if(capsense_baseline[i] < capsense_minimum_baseline[i])capsense_baseline[i] = capsense_minimum_baseline[i];
-		uint16_t judge = (raw > capsense_baseline[i]) ? (raw - capsense_baseline[i]) / ((Flash.capsense_maxmium[i] - capsense_minimum_baseline[i] + 500) / 255) : 0;
+		uint16_t judge = (raw > capsense_baseline[i]) ? (raw - capsense_baseline[i]) / ((capsense_maxmium[i] - capsense_minimum_baseline[i] + 500) / 255) : 0;
 		capsense_touch_status[i] = judge > 254 ? 254 : judge;
 	}
 	//Flash_Save(&Flash);

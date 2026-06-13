@@ -26,6 +26,8 @@ extern packet_capsense_t Touch;
 extern uint8_t capsense_touch_status[128];
 extern uint16_t capsense_baseline[128];
 extern uint16_t capsense_minimum_baseline[128];
+extern uint16_t capsense_maxmium[128];
+extern uint8_t capsense_sava_flag[128];
 
 void capsense_init();
 //void capsense_baseline_updata();

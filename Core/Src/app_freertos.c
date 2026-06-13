@@ -27,6 +27,7 @@
 #include "tim.h"
 #include "system_mode.h"
 #include "LED.h"
+#include "eeprom_emul.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -174,6 +175,7 @@ void StartTask02(void *argument)
 	  osDelay(1);
 	  Air_LED_refresh();
 	  System_Mode_Poll();
+
 //	  for(uint8_t i = 0;i<6;i++){
 //		  if(Air_Trigger_Status & (1 << i)){
 //			  Air_LED_set(i,128,128,128);
@@ -205,8 +207,8 @@ void StartTask03(void *argument)
   /* Infinite loop */
   for(;;)
   {
-
-    osDelay(1);
+	  App_EEPROM_Save();
+    osDelay(1000);
   }
   /* USER CODE END Task03 */
 }

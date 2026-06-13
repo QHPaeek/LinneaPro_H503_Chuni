@@ -1,27 +1,34 @@
-#ifndef INC_FLASH_H_
-#define INC_FLASH_H_
+#ifndef __EEPROM_FLASH_H
+#define __EEPROM_FLASH_H
 
-#include "stdint.h"
+#include "main.h"
 
-#define FLASH_DATA_RAW_SIZE  288  // 你需要的总字节数
+#define EEPROM_FLASH_ADDR      0x0801E000UL
 
-typedef union
+#define EEPROM_MAGIC           0x55AA1234UL
+
+#define EEPROM_ITEM_COUNT      128
+
+typedef struct
 {
-    uint32_t quadword[FLASH_DATA_RAW_SIZE / 4] __attribute__((aligned(16)));
-    struct
-    {
-        uint16_t capsense_maxmium[128]; // 256 字节
-        uint8_t  value8[16];            // 16 字节
-        uint8_t  reserve[16];           // 16 字节
-    };
-} FlashData;
+    uint32_t magic;
 
-_Static_assert(sizeof(FlashData) == FLASH_DATA_RAW_SIZE, "FlashData size is wrong!");
-_Static_assert(sizeof(FlashData) % 16 == 0, "FlashData must be 16-byte aligned!");
+    uint16_t data[EEPROM_ITEM_COUNT];
 
-extern FlashData Flash;
+    uint16_t crc;
 
-void Flash_Save(FlashData *data);
-void Flash_Load(FlashData *data);
+} EEPROM_DATA_t;
+
+uint8_t EEPROM_Load(void);
+
+HAL_StatusTypeDef EEPROM_Save(void);
+
+uint16_t EEPROM_Read(uint16_t index);
+
+HAL_StatusTypeDef EEPROM_Write(
+        uint16_t index,
+        uint16_t value);
+
+uint16_t* EEPROM_GetBuffer(void);
 
 #endif
