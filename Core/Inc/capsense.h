@@ -29,6 +29,7 @@ extern uint16_t capsense_minimum_baseline[128];
 extern uint16_t capsense_maxmium[128];
 extern uint8_t capsense_sava_flag[128];
 
+void capsense_history_operate();
 void capsense_init();
 //void capsense_baseline_updata();
 void capsense_poll();

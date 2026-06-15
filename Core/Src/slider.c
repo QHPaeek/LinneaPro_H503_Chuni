@@ -25,6 +25,8 @@ uint8_t debug_channel = 0;
 extern uint8_t capsense_data_ready;
 extern uint8_t Air_Trigger_Status;
 extern uint16_t capsense_maxmium[128];
+extern uint16_t capsense_history[3][128];
+extern uint8_t capsense_history_tail;
 
 uint8_t slider_status[32];
 uint8_t touch_sheet[8][4] = {
@@ -118,7 +120,8 @@ void slider_poll_debug(){
 	if(capsense_data_ready == 0xf){
 		vofa1.raw_data_fl[0] = Touch.channel_raw[debug_channel];
 		vofa1.raw_data_fl[1] = capsense_baseline[debug_channel];
-		vofa1.raw_data_fl[2] = capsense_maxmium[debug_channel];
+//		vofa1.raw_data_fl[2] = capsense_maxmium[debug_channel];
+		vofa1.raw_data_fl[2] = capsense_history[capsense_history_tail][debug_channel];
 		uint8_t tmp[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x80,0x7f};
 		memcpy(tmp,vofa1.raw_data_u8,12);
 		CDC_Transmit(0, tmp,16);

@@ -39,14 +39,21 @@ uint16_t capsense_low_baseline_duration[128];
 uint16_t capsense_orinigal[128];
 uint16_t capsense_baseline[128];
 uint16_t capsense_threshold[128];
+uint8_t uart_data_ready = 0;
 uint8_t capsense_data_ready = 0;
 //uint8_t capsense_bit;
 uint8_t capsense_touch_status[128];
-uint8_t uart_data_ready[4] = {0,0,0,0};
 uint16_t capsense_minimum_baseline[128];
 uint8_t capsense_low_bsln_flag[128];
 uint16_t capsense_maxmium[128];
 uint8_t capsense_sava_flag[128];
+//uint16_t capsense_raw_history[3][128];
+//uint16_t capsense_flitered_history[3][128];
+uint16_t capsense_history[3][128];
+uint8_t capsense_history_header = 0;
+uint8_t capsense_history_body = 0;
+uint8_t capsense_history_tail = 0;
+uint8_t capsense_history_filled_flag = 0;
 
 extern EEPROM_DATA_t g_eeprom;
 
@@ -71,7 +78,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     	src = uart1_buf;
     	dest = Touch.touc_data_a;
     	if(check_sum(src)){
-			capsense_data_ready |= 1;
+    		uart_data_ready |= 1;
 			memcpy(dest, src+1, 64);
     	}
     }
@@ -79,7 +86,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     	src = uart2_buf;
     	dest = Touch.touc_data_d;
     	if(check_sum(src)){
-			capsense_data_ready |= 2;
+    		uart_data_ready |= 2;
 			memcpy(dest, src+1, 64);
 		}
     }
@@ -87,7 +94,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     	src = uart3_buf;
     	dest = Touch.touc_data_c;
     	if(check_sum(src)){
-			capsense_data_ready |= 4;
+    		uart_data_ready |= 4;
 			memcpy(dest, src+1, 64);
 		}
 	}
@@ -95,14 +102,44 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     	src = lpuart1_buf;
     	dest = Touch.touc_data_b;
     	if(check_sum(src)){
-			capsense_data_ready |= 8;
+    		uart_data_ready |= 8;
 			memcpy(dest, src+1, 64);
 		}
     }
     else{
     	return;
     }
+    if(uart_data_ready == 0xf){
+    	capsense_history_operate();
+    	uart_data_ready = 0;
+    	capsense_data_ready = 0xf;
+    }
+}
 
+void capsense_history_operate(){
+//    	for(uint8_t i =0;i<128;i++){
+//    		capsense_history[capsense_history_header][i] = Touch.channel_raw[i];
+//    	}
+	memcpy(capsense_history[capsense_history_header],Touch.channel_raw,256);
+	if(capsense_history_filled_flag != 2){
+		capsense_history_filled_flag ++;
+		return;
+	}
+	capsense_history_body = (capsense_history_header == 0) ? 2 : capsense_history_header - 1;
+	capsense_history_tail = (capsense_history_body == 0) ? 2 : capsense_history_body - 1;
+	for(uint8_t i = 0;i<128;i++){
+		if(capsense_history[capsense_history_header][i] < capsense_history[capsense_history_body][i]){
+			if(capsense_history[capsense_history_tail][i] < capsense_history[capsense_history_body][i]){
+				capsense_history[capsense_history_body][i] = (capsense_history[capsense_history_header][i] + capsense_history[capsense_history_tail][i]) / 2;
+			}
+		}
+		if(capsense_history[capsense_history_header][i] > capsense_history[capsense_history_body][i]){
+			if(capsense_history[capsense_history_tail][i] > capsense_history[capsense_history_body][i]){
+				capsense_history[capsense_history_body][i] = (capsense_history[capsense_history_header][i] + capsense_history[capsense_history_tail][i]) / 2;
+			}
+		}
+	}
+	capsense_history_header = (capsense_history_header + 1) % 3;
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
@@ -135,6 +172,9 @@ void capsense_init()
 		capsense_baseline[i] = 0xffff;
 		capsense_sava_flag[i] = 0;
 		capsense_maxmium[i] = 0;
+		capsense_history[0][i] = 0;
+		capsense_history[1][i] = 0;
+		capsense_history[2][i] = 0;
 	}
 //	Flash_Load(&Flash);
 
@@ -150,8 +190,12 @@ void capsense_init()
     __HAL_DMA_DISABLE_IT(&handle_GPDMA1_Channel3, DMA_IT_HT);
 
 
-    osDelay(100);
-    while(capsense_data_ready == 0);
+    for(uint8_t i=0;i<3;i++){
+    	while(capsense_data_ready != 0xf){
+			osDelay(1);
+		}
+    	capsense_data_ready = 0;
+    }
     if(EEPROM_Load() == 1){
     	for(uint8_t i = 0;i<128;i++){
     		capsense_maxmium[i] = g_eeprom.data[i];
@@ -187,7 +231,7 @@ void capsense_poll(){
 		return;
 	}
 	for(uint8_t i = 0;i<128;i++){
-		uint16_t raw = Touch.channel_raw[i];
+		uint16_t raw = capsense_history[capsense_history_tail][i];
 		if(capsense_minimum_baseline[i] > raw){
 			capsense_minimum_baseline[i] = raw;
 		}
@@ -244,9 +288,9 @@ void capsense_poll(){
 //		}
 //		if(capsense_baseline[i] > 60000)capsense_baseline[i] = 60000;
 //		if(capsense_baseline[i] < capsense_minimum_baseline[i])capsense_baseline[i] = capsense_minimum_baseline[i];
-		uint16_t judge = (raw > capsense_baseline[i]) ? (raw - capsense_baseline[i]) / ((capsense_maxmium[i] - capsense_minimum_baseline[i] + 500) / 255) : 0;
+		uint16_t judge = (raw > capsense_baseline[i]) ? (raw - capsense_baseline[i]) / ((capsense_maxmium[i] - capsense_minimum_baseline[i]) / 255) : 0;
 		capsense_touch_status[i] = judge > 254 ? 254 : judge;
 	}
 	//Flash_Save(&Flash);
-	//capsense_data_ready = 0;
+//	capsense_data_ready = 0;
 }
