@@ -43,7 +43,7 @@ uint8_t uart_data_ready = 0;
 uint8_t capsense_data_ready = 0;
 //uint8_t capsense_bit;
 uint8_t capsense_touch_status[128];
-uint16_t capsense_minimum_baseline[128];
+uint16_t capsense_minimum[128];
 uint8_t capsense_low_bsln_flag[128];
 uint16_t capsense_maxmium[128];
 uint8_t capsense_sava_flag[128];
@@ -54,6 +54,10 @@ uint8_t capsense_history_header = 0;
 uint8_t capsense_history_body = 0;
 uint8_t capsense_history_tail = 0;
 uint8_t capsense_history_filled_flag = 0;
+uint8_t capsense_image[4][32];
+uint8_t capsense_image_index[4][32];
+uint8_t capsense_bsln_stop_flag[128];
+
 
 extern EEPROM_DATA_t g_eeprom;
 
@@ -116,6 +120,11 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     }
 }
 
+/************************************************
+ * 历史周期数值计算
+ * 如果中间数值比头和尾都大/小（尖刺形状），则将其赋值为头和尾的平均数
+ ************************************************/
+
 void capsense_history_operate(){
 //    	for(uint8_t i =0;i<128;i++){
 //    		capsense_history[capsense_history_header][i] = Touch.channel_raw[i];
@@ -165,20 +174,6 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 
 void capsense_init()
 {
-	for(uint8_t i = 0;i<128;i++){
-		capsense_threshold[i] = 600;
-		capsense_minimum_baseline[i] = 0xffff;
-		capsense_low_bsln_flag[i] = 0;
-		capsense_baseline[i] = 0xffff;
-		capsense_sava_flag[i] = 0;
-		capsense_maxmium[i] = 0;
-		capsense_history[0][i] = 0;
-		capsense_history[1][i] = 0;
-		capsense_history[2][i] = 0;
-	}
-//	Flash_Load(&Flash);
-
-
 	while(HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_buf, UART_FRAME_LEN) != HAL_OK);
 	while(HAL_UARTEx_ReceiveToIdle_DMA(&huart2, uart2_buf, UART_FRAME_LEN) != HAL_OK);
 	while(HAL_UARTEx_ReceiveToIdle_DMA(&huart3, uart3_buf, UART_FRAME_LEN) != HAL_OK);
@@ -189,13 +184,36 @@ void capsense_init()
     __HAL_DMA_DISABLE_IT(&handle_GPDMA1_Channel2, DMA_IT_HT);
     __HAL_DMA_DISABLE_IT(&handle_GPDMA1_Channel3, DMA_IT_HT);
 
+	memset(capsense_image,0,128);
+	for(uint8_t i = 0;i<8;i++){
+		for(uint8_t j=0;j<4;j++){
+			capsense_image_index[j][i] = 32*3 + i*4 +j;
+			capsense_image_index[j][i+8] = 32*2 + i*4 +j;
+			capsense_image_index[j][i+16] = 32 + i*4 +j;
+			capsense_image_index[j][i+24] = i*4 +j;
+		}
+	}
 
-    for(uint8_t i=0;i<3;i++){
+	for(uint8_t i = 0;i<128;i++){
+		capsense_threshold[i] = 600;
+		capsense_minimum[i] = 0xffff;
+		capsense_low_bsln_flag[i] = 0;
+		capsense_baseline[i] = 0xffff;
+		capsense_sava_flag[i] = 0;
+		capsense_maxmium[i] = 0;
+		capsense_history[0][i] = 0;
+		capsense_history[1][i] = 0;
+		capsense_history[2][i] = 0;
+		capsense_bsln_stop_flag[i] = 0;
+	}
+
+    for(uint8_t i=0;i<10;i++){
     	while(capsense_data_ready != 0xf){
 			osDelay(1);
 		}
     	capsense_data_ready = 0;
     }
+
     if(EEPROM_Load() == 1){
     	for(uint8_t i = 0;i<128;i++){
     		capsense_maxmium[i] = g_eeprom.data[i];
@@ -203,8 +221,9 @@ void capsense_init()
 		for(uint8_t j = 0;j<100;j++){
 			while(capsense_data_ready != 0xf);
 			for(uint8_t i = 0;i<128;i++){
-				if(capsense_minimum_baseline[i] > Touch.channel_raw[i]){
-					capsense_minimum_baseline[i] = Touch.channel_raw[i];
+				uint16_t raw = capsense_history[capsense_history_tail][i];
+				if(capsense_minimum[i] > raw){
+					capsense_minimum[i] = raw;
 				}
 			}
 			capsense_data_ready = 0;
@@ -213,11 +232,12 @@ void capsense_init()
 		for(uint8_t j = 0;j<100;j++){
 			while(capsense_data_ready != 0xf);
 			for(uint8_t i = 0;i<128;i++){
-				if(capsense_minimum_baseline[i] > Touch.channel_raw[i]){
-					capsense_minimum_baseline[i] = Touch.channel_raw[i];
+				uint16_t raw = capsense_history[capsense_history_tail][i];
+				if(capsense_minimum[i] > raw){
+					capsense_minimum[i] = raw;
 				}
-				if(capsense_maxmium[i] < Touch.channel_raw[i]){
-					capsense_maxmium[i] = Touch.channel_raw[i];
+				if(capsense_maxmium[i] < raw){
+					capsense_maxmium[i] = raw;
 					capsense_sava_flag[i] = 1;
 				}
 			}
@@ -226,25 +246,110 @@ void capsense_init()
     }
 }
 
+/************************************************
+ * 触摸数值作为图像触摸
+ * 检测到某点一定被按下，则停止更新它周围一圈传感器的基线 。这有助于改善单指按下在多个传感器之间滑动的情况。
+ * 单指按下时，目标邻近的传感器区块会有小幅缓慢的数值提升，若滑动过去有可能因为基线同步提升而导致不触发。
+ ************************************************/
+
+void capsense_image_operate(){
+	for(uint8_t i = 0;i<32;i++){
+		for(uint8_t j = 0;j<4;j++){
+			uint8_t cur = capsense_image_index[j][i];
+			float numerator = (float)(capsense_history[capsense_history_tail][cur] - capsense_minimum[cur]);
+			float denominator = (float)(capsense_maxmium[cur] - capsense_minimum[cur]);
+			capsense_image[j][i] = (uint8_t)((numerator / denominator) * 255.0f);
+		}
+	}
+	memset(capsense_bsln_stop_flag,0,128);
+	for(uint8_t i = 0;i<32;i++){
+		for(uint8_t j = 0;j<4;j++){
+			if(capsense_image[j][i] > 50){
+				if((j > 0) && (i > 0) && (j < 3) && (i<31)){
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
+				}else if((j > 0) && (i > 0) && (j < 3)){ //i = 31
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
+				}else if((j > 0) && (i > 0) && (i<31)){ //j = 3
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
+				}else if((j > 0) && (j < 3) && (i<31)){ //i = 0
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
+				}else if((i > 0) && (j < 3) && (i<31)){//j = 0
+					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
+				}else if((j < 3) && (i<31)){//i = 0,j = 0
+					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
+				}else if((j > 0) && (i<31)){//i = 0,j = 3
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
+				}else if((j > 0) && (i > 0)){//i = 31,j = 3
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
+				}else if((j < 3) && (i > 0)){//i = 31,j = 0
+					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
+					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
+				}
+			}
+		}
+	}
+}
 void capsense_poll(){
 	if(capsense_data_ready != 0xf){
 		return;
 	}
 	for(uint8_t i = 0;i<128;i++){
 		uint16_t raw = capsense_history[capsense_history_tail][i];
-		if(capsense_minimum_baseline[i] > raw){
-			capsense_minimum_baseline[i] = raw;
+		if(capsense_minimum[i] > raw){
+			capsense_minimum[i] = raw;
 		}
 		if(capsense_maxmium[i] < raw){
 			capsense_maxmium[i] = raw;
 			capsense_sava_flag[i] = 1;
 		}
+	}
+	capsense_image_operate();
+	for(uint8_t i = 0;i<128;i++){
+		uint16_t raw = capsense_history[capsense_history_tail][i];
 		if(capsense_baseline[i] == 0){
 			capsense_baseline[i] = raw;
 			capsense_low_bsln_flag[i] = 0;
 		}else if(raw > capsense_baseline[i] + capsense_threshold[i]){
 			capsense_low_bsln_flag[i] = 0;
-		}else if(raw > capsense_baseline[i] - 200){
+		}else if(raw < capsense_baseline[i] - 200){
+			if(capsense_low_bsln_flag[i] > 2){
+				capsense_baseline[i] = (capsense_baseline[i] * 0.5) + (raw * 0.5);
+			}else{
+				capsense_low_bsln_flag[i]++;
+			}
+		}else if(capsense_bsln_stop_flag[i]){
+
+		}else{
 			capsense_low_bsln_flag[i] = 0;
 			if(capsense_baseline[i] < raw){
 				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_BSLN_SENS_FACTOR)) + (raw * CAPSENSE_BSLN_SENS_FACTOR);
@@ -256,13 +361,7 @@ void capsense_poll(){
 				capsense_low_baseline_duration[i]++;
 			}else{
 				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_BSLN_SENS_FACTOR)) + (raw * CAPSENSE_BSLN_SENS_FACTOR);
-//				capsense_minimum_baseline[i] = Touch.channel_raw[i];
-			}
-		}else{
-			if(capsense_low_bsln_flag[i] > 2){
-				capsense_baseline[i] = (capsense_baseline[i] * 0.5) + (raw * 0.5);
-			}else{
-				capsense_low_bsln_flag[i]++;
+//				capsense_minimum[i] = Touch.channel_raw[i];
 			}
 		}
 //		if(capsense_baseline[i] < (Touch.channel_raw[i] - capsense_threshold[i])){
@@ -283,12 +382,12 @@ void capsense_poll(){
 //				capsense_low_baseline_duration[i]++;
 //			}else{
 //				capsense_baseline[i] = (capsense_baseline[i] * 0.98) + (Touch.channel_raw[i] * 0.02);
-////				capsense_minimum_baseline[i] = Touch.channel_raw[i];
+////				capsense_minimum[i] = Touch.channel_raw[i];
 //			}
 //		}
 //		if(capsense_baseline[i] > 60000)capsense_baseline[i] = 60000;
-//		if(capsense_baseline[i] < capsense_minimum_baseline[i])capsense_baseline[i] = capsense_minimum_baseline[i];
-		uint16_t judge = (raw > capsense_baseline[i]) ? (raw - capsense_baseline[i]) / ((capsense_maxmium[i] - capsense_minimum_baseline[i]) / 255) : 0;
+//		if(capsense_baseline[i] < capsense_minimum[i])capsense_baseline[i] = capsense_minimum[i];
+		float judge =(raw > capsense_baseline[i]) ? ((float)(raw - capsense_baseline[i])) / (((float)(capsense_maxmium[i] - capsense_minimum[i])) / 255.0f) : 0.0f;
 		capsense_touch_status[i] = judge > 254 ? 254 : judge;
 	}
 	//Flash_Save(&Flash);

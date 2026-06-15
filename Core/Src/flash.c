@@ -1,4 +1,3 @@
-#include "eeprom_emul.h"
 #include "stdint.h"
 #include "usbd_def.h"
 #include <stdarg.h>

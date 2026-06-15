@@ -27,7 +27,6 @@
 #include "tim.h"
 #include "system_mode.h"
 #include "LED.h"
-#include "eeprom_emul.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
