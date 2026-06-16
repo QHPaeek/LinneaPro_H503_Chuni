@@ -28,6 +28,8 @@ extern uint16_t capsense_maxmium[128];
 extern uint16_t capsense_history[3][128];
 extern uint8_t capsense_history_tail;
 extern uint16_t capsense_minimum[128];
+extern uint8_t capsense_tap_flag[128];
+extern uint8_t capsense_blind_flag[128];
 
 uint8_t slider_status[32];
 uint8_t touch_sheet[8][4] = {
@@ -85,6 +87,9 @@ void slider_poll(){
 						slider_transfer_buf[3+i*8+j] = capsense_touch_status[touch_sheet[j][k] + i*32];
 					}
 				}
+				if(slider_transfer_buf[3+i*8+j] < 20){
+					slider_transfer_buf[3+i*8+j] = 0;
+				}
 			}
 		}
 		if(sys_mode.Game_Mode == 1){
@@ -122,9 +127,10 @@ void slider_poll_debug(){
 		vofa1.raw_data_fl[0] = Touch.channel_raw[debug_channel];
 		vofa1.raw_data_fl[1] = capsense_baseline[debug_channel];
 		vofa1.raw_data_fl[2] = capsense_maxmium[debug_channel];
-		vofa1.raw_data_fl[3] = capsense_minimum[debug_channel];
+		vofa1.raw_data_fl[3] = capsense_touch_status[debug_channel];
+//		vofa1.raw_data_fl[3] = capsense_minimum[debug_channel];
 //		vofa1.raw_data_fl[2] = capsense_history[capsense_history_tail][debug_channel];
-		vofa1.raw_data_fl[4] = capsense_touch_status[debug_channel];
+		vofa1.raw_data_fl[4] = capsense_blind_flag[debug_channel];
 		uint8_t tmp[24] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x80,0x7f};
 		memcpy(tmp,vofa1.raw_data_u8,20);
 		CDC_Transmit(0, tmp,24);

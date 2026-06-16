@@ -56,8 +56,8 @@ uint8_t capsense_history_tail = 0;
 uint8_t capsense_history_filled_flag = 0;
 uint8_t capsense_image[4][32];
 uint8_t capsense_image_index[4][32];
-uint8_t capsense_bsln_stop_flag[128];
-
+uint8_t capsense_tap_flag[128];
+uint8_t capsense_blind_flag[128];
 
 extern EEPROM_DATA_t g_eeprom;
 
@@ -195,7 +195,7 @@ void capsense_init()
 	}
 
 	for(uint8_t i = 0;i<128;i++){
-		capsense_threshold[i] = 600;
+		capsense_threshold[i] = 400;
 		capsense_minimum[i] = 0xffff;
 		capsense_low_bsln_flag[i] = 0;
 		capsense_baseline[i] = 0xffff;
@@ -204,7 +204,8 @@ void capsense_init()
 		capsense_history[0][i] = 0;
 		capsense_history[1][i] = 0;
 		capsense_history[2][i] = 0;
-		capsense_bsln_stop_flag[i] = 0;
+		capsense_tap_flag[i] = 0;
+		capsense_blind_flag[i] = 0;
 	}
 
     for(uint8_t i=0;i<10;i++){
@@ -261,59 +262,76 @@ void capsense_image_operate(){
 			capsense_image[j][i] = (uint8_t)((numerator / denominator) * 255.0f);
 		}
 	}
-	memset(capsense_bsln_stop_flag,0,128);
-	for(uint8_t i = 0;i<32;i++){
-		for(uint8_t j = 0;j<4;j++){
-			if(capsense_image[j][i] > 50){
-				if((j > 0) && (i > 0) && (j < 3) && (i<31)){
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
-				}else if((j > 0) && (i > 0) && (j < 3)){ //i = 31
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
-				}else if((j > 0) && (i > 0) && (i<31)){ //j = 3
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
-				}else if((j > 0) && (j < 3) && (i<31)){ //i = 0
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
-				}else if((i > 0) && (j < 3) && (i<31)){//j = 0
-					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
-				}else if((j < 3) && (i<31)){//i = 0,j = 0
-					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i+1]] = capsense_image[j+1][i+1] < 40 ? 1 : 0;
-				}else if((j > 0) && (i<31)){//i = 0,j = 3
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i+1]] = capsense_image[j-1][i+1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i+1]] = capsense_image[j][i+1] < 40 ? 1 : 0;
-				}else if((j > 0) && (i > 0)){//i = 31,j = 3
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i-1]] = capsense_image[j-1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j-1][i]] = capsense_image[j-1][i] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
-				}else if((j < 3) && (i > 0)){//i = 31,j = 0
-					capsense_bsln_stop_flag[capsense_image_index[j][i-1]] = capsense_image[j][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i-1]] = capsense_image[j+1][i-1] < 40 ? 1 : 0;
-					capsense_bsln_stop_flag[capsense_image_index[j+1][i]] = capsense_image[j+1][i] < 40 ? 1 : 0;
+	memset(capsense_blind_flag, 0, 128);
+	for(uint8_t y = 0; y < 3; y++){
+	    for(uint8_t x = 0; x < 31; x++){
+	        bool valid = true;
+	        /* 检查2×2内部 */
+	        for(uint8_t dy = 0; dy < 2 && valid; dy++){
+	            for(uint8_t dx = 0; dx < 2; dx++){
+	                uint8_t v = capsense_image[y + dy][x + dx];
+	                if(v <= 20 || v >= 40){
+	                    valid = false;
+	                    break;
+	                }
+	            }
+	        }
+	        if(!valid){
+	            continue;
+	        }
+	        /* 检查外围一圈 */
+	        for(int8_t dy = -1; dy <= 2 && valid; dy++){
+	            for(int8_t dx = -1; dx <= 2; dx++){
+	                /* 跳过中间2×2 */
+	                if(dx >= 0 && dx <= 1 && dy >= 0 && dy <= 1){
+	                    continue;
+	                }
+	                int16_t yy = y + dy;
+	                int16_t xx = x + dx;
+	                /* 越界忽略 */
+	                if(yy < 0 || yy >= 4 || xx < 0 || xx >= 32){
+	                    continue;
+	                }
+	                if(capsense_image[yy][xx] >= 10){
+	                    valid = false;
+	                    break;
+	                }
+	            }
+	        }
+	        if(valid){
+	            /* 左下角 */
+	            uint8_t idx = capsense_image_index[y + 1][x];
+	            capsense_blind_flag[idx] = 1;
+	            capsense_tap_flag[idx] = 1;
+	        }
+	    }
+	}
+	memset(capsense_tap_flag,0,128);
+	for(uint8_t i = 0; i < 32; i++){
+		for(uint8_t j = 0; j < 4; j++){
+			uint8_t cur = capsense_image_index[j][i];
+			if((capsense_image[j][i] <= 40) && (capsense_blind_flag[cur] == 0)){
+				continue;
+			}
+
+			/* 遍历8邻域 */
+			for(int8_t dy = -1; dy <= 1; dy++){
+				for(int8_t dx = -1; dx <= 1; dx++){
+				/* 跳过自身 */
+					if(dx == 0 && dy == 0){
+						continue;
+					}
+
+					int16_t ny = j + dy;
+					int16_t nx = i + dx;
+
+					/* 边界检查 */
+					if(ny < 0 || ny >= 4 || nx < 0 || nx >= 32){
+						continue;
+					}
+
+					uint8_t idx = capsense_image_index[ny][nx];
+					capsense_tap_flag[idx] = (capsense_image[ny][nx] < 40);
 				}
 			}
 		}
@@ -332,10 +350,15 @@ void capsense_poll(){
 			capsense_maxmium[i] = raw;
 			capsense_sava_flag[i] = 1;
 		}
+		float threshold = (capsense_maxmium[i] - capsense_minimum[i]) * 0.1f;
+		capsense_threshold[i] = threshold;
 	}
 	capsense_image_operate();
 	for(uint8_t i = 0;i<128;i++){
 		uint16_t raw = capsense_history[capsense_history_tail][i];
+		if(capsense_blind_flag[i]){
+			raw += 2000;
+		}
 		if(capsense_baseline[i] == 0){
 			capsense_baseline[i] = raw;
 			capsense_low_bsln_flag[i] = 0;
@@ -347,7 +370,7 @@ void capsense_poll(){
 			}else{
 				capsense_low_bsln_flag[i]++;
 			}
-		}else if(capsense_bsln_stop_flag[i]){
+		}else if(capsense_tap_flag[i]){
 
 		}else{
 			capsense_low_bsln_flag[i] = 0;
