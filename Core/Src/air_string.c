@@ -50,8 +50,8 @@ void Air_String_Poll(){
 		osDelay(1);
 		Air_Expect = i;
 		Air_Select_Channel(i);
-		osDelay(1);
-//		Air_String_Check(i);
+		osDelay(2);
+		Air_String_Check(i);
 		Air_Select_Channel(7);
 	}
 	Air_Trigger_Status = Air_Trigger_tmp;
@@ -68,36 +68,44 @@ void Air_String_IRQHandler(uint8_t no){
 
 void Air_String_Check(uint8_t no){
 	switch(no){
-	case 0:{
-		if(!HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_5)){
-			Air_Trigger_tmp &= ~(1 << no);
+		case 0:{
+			if(!HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_5)){
+				Air_Trigger_tmp &= ~(1 << no);
+			}
+			break;
 		}
-	}
-	case 1:{
-		if(!HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_6)){
-			Air_Trigger_tmp &= ~(1 << no);
+		case 1:{
+			if(!HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_6)){
+				Air_Trigger_tmp &= ~(1 << no);
+			}
+			break;
 		}
-	}
-	case 2:{
-		if(!HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_8)){
-			Air_Trigger_tmp &= ~(1 << no);
+		case 2:{
+			if(!HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_8)){
+				Air_Trigger_tmp &= ~(1 << no);
+			}
+			break;
 		}
-	}
-	case 3:{
-		if(!HAL_GPIO_ReadPin(GPIOC,GPIO_PIN_13)){
-			Air_Trigger_tmp &= ~(1 << no);
+		case 3:{
+			if(!HAL_GPIO_ReadPin(GPIOC,GPIO_PIN_13)){
+				Air_Trigger_tmp &= ~(1 << no);
+			}
+			break;
 		}
-	}
-	case 4:{
-		if(!HAL_GPIO_ReadPin(GPIOC,GPIO_PIN_14)){
-			Air_Trigger_tmp &= ~(1 << no);
+		case 4:{
+			if(!HAL_GPIO_ReadPin(GPIOC,GPIO_PIN_14)){
+				Air_Trigger_tmp &= ~(1 << no);
+			}
+			break;
 		}
-	}
-	case 5:{
-		if(!HAL_GPIO_ReadPin(GPIOC,GPIO_PIN_15)){
-			Air_Trigger_tmp &= ~(1 << no);
+		case 5:{
+			if(!HAL_GPIO_ReadPin(GPIOC,GPIO_PIN_15)){
+				Air_Trigger_tmp &= ~(1 << no);
+			}
+			break;
 		}
-	}
+		default:
+			break;
 	}
 //		Air_Trigger_tmp &= ~(1 << no);
 }

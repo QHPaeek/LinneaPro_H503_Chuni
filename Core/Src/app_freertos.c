@@ -187,7 +187,7 @@ void StartTask02(void *argument)
 //	  }
 //	  Ground_LED_refresh();
 //	  Air_LED_refresh();
-	  osDelay(10);
+	  osDelay(2);
   }
   /* USER CODE END Task02 */
 }

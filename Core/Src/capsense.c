@@ -114,7 +114,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     	return;
     }
     if(uart_data_ready == 0xf){
-    	capsense_history_operate();
+//    	capsense_history_operate();
     	uart_data_ready = 0;
     	capsense_data_ready = 0xf;
     }
@@ -125,31 +125,31 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
  * 如果中间数值比头和尾都大/小（尖刺形状），则将其赋值为头和尾的平均数
  ************************************************/
 
-void capsense_history_operate(){
-//    	for(uint8_t i =0;i<128;i++){
-//    		capsense_history[capsense_history_header][i] = Touch.channel_raw[i];
-//    	}
-	memcpy(capsense_history[capsense_history_header],Touch.channel_raw,256);
-	if(capsense_history_filled_flag != 2){
-		capsense_history_filled_flag ++;
-		return;
-	}
-	capsense_history_body = (capsense_history_header == 0) ? 2 : capsense_history_header - 1;
-	capsense_history_tail = (capsense_history_body == 0) ? 2 : capsense_history_body - 1;
-	for(uint8_t i = 0;i<128;i++){
-		if(capsense_history[capsense_history_header][i] < capsense_history[capsense_history_body][i]){
-			if(capsense_history[capsense_history_tail][i] < capsense_history[capsense_history_body][i]){
-				capsense_history[capsense_history_body][i] = (capsense_history[capsense_history_header][i] + capsense_history[capsense_history_tail][i]) / 2;
-			}
-		}
-		if(capsense_history[capsense_history_header][i] > capsense_history[capsense_history_body][i]){
-			if(capsense_history[capsense_history_tail][i] > capsense_history[capsense_history_body][i]){
-				capsense_history[capsense_history_body][i] = (capsense_history[capsense_history_header][i] + capsense_history[capsense_history_tail][i]) / 2;
-			}
-		}
-	}
-	capsense_history_header = (capsense_history_header + 1) % 3;
-}
+//void capsense_history_operate(){
+////    	for(uint8_t i =0;i<128;i++){
+////    		capsense_history[capsense_history_header][i] = Touch.channel_raw[i];
+////    	}
+//	memcpy(capsense_history[capsense_history_header],,256);
+//	if(capsense_history_filled_flag != 2){
+//		capsense_history_filled_flag ++;
+//		return;
+//	}
+//	capsense_history_body = (capsense_history_header == 0) ? 2 : capsense_history_header - 1;
+//	capsense_history_tail = (capsense_history_body == 0) ? 2 : capsense_history_body - 1;
+//	for(uint8_t i = 0;i<128;i++){
+//		if(capsense_history[capsense_history_header][i] < capsense_history[capsense_history_body][i]){
+//			if(capsense_history[capsense_history_tail][i] < capsense_history[capsense_history_body][i]){
+//				capsense_history[capsense_history_body][i] = (capsense_history[capsense_history_header][i] + capsense_history[capsense_history_tail][i]) / 2;
+//			}
+//		}
+//		if(capsense_history[capsense_history_header][i] > capsense_history[capsense_history_body][i]){
+//			if(capsense_history[capsense_history_tail][i] > capsense_history[capsense_history_body][i]){
+//				capsense_history[capsense_history_body][i] = (capsense_history[capsense_history_header][i] + capsense_history[capsense_history_tail][i]) / 2;
+//			}
+//		}
+//	}
+//	capsense_history_header = (capsense_history_header + 1) % 3;
+//}
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
@@ -222,7 +222,8 @@ void capsense_init()
 		for(uint8_t j = 0;j<100;j++){
 			while(capsense_data_ready != 0xf);
 			for(uint8_t i = 0;i<128;i++){
-				uint16_t raw = capsense_history[capsense_history_tail][i];
+//				uint16_t raw = capsense_history[capsense_history_tail][i];
+				uint16_t raw = Touch.channel_raw[i];
 				if(capsense_minimum[i] > raw){
 					capsense_minimum[i] = raw;
 				}
@@ -233,7 +234,8 @@ void capsense_init()
 		for(uint8_t j = 0;j<100;j++){
 			while(capsense_data_ready != 0xf);
 			for(uint8_t i = 0;i<128;i++){
-				uint16_t raw = capsense_history[capsense_history_tail][i];
+//				uint16_t raw = capsense_history[capsense_history_tail][i];
+				uint16_t raw = Touch.channel_raw[i];
 				if(capsense_minimum[i] > raw){
 					capsense_minimum[i] = raw;
 				}
@@ -257,7 +259,8 @@ void capsense_image_operate(){
 	for(uint8_t i = 0;i<32;i++){
 		for(uint8_t j = 0;j<4;j++){
 			uint8_t cur = capsense_image_index[j][i];
-			float numerator = (float)(capsense_history[capsense_history_tail][cur] - capsense_minimum[cur]);
+//			float numerator = (float)(capsense_history[capsense_history_tail][cur] - capsense_minimum[cur]);
+			float numerator = (float)(Touch.channel_raw[cur] - capsense_minimum[cur]);
 			float denominator = (float)(capsense_maxmium[cur] - capsense_minimum[cur]);
 			capsense_image[j][i] = (uint8_t)((numerator / denominator) * 255.0f);
 		}
@@ -342,7 +345,8 @@ void capsense_poll(){
 		return;
 	}
 	for(uint8_t i = 0;i<128;i++){
-		uint16_t raw = capsense_history[capsense_history_tail][i];
+//		uint16_t raw = capsense_history[capsense_history_tail][i];
+		uint16_t raw = Touch.channel_raw[i];
 		if(capsense_minimum[i] > raw){
 			capsense_minimum[i] = raw;
 		}
@@ -355,7 +359,8 @@ void capsense_poll(){
 	}
 	capsense_image_operate();
 	for(uint8_t i = 0;i<128;i++){
-		uint16_t raw = capsense_history[capsense_history_tail][i];
+//		uint16_t raw = capsense_history[capsense_history_tail][i];
+		uint16_t raw = Touch.channel_raw[i];
 		if(capsense_blind_flag[i]){
 			raw += 2000;
 		}

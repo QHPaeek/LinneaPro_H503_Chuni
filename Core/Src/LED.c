@@ -13,6 +13,7 @@
 #define AIR_LED_CHANNEL 6
 
 uint8_t RGB_data[3 * NUM_LED];
+uint8_t Air_LED_Refresh_Flag = 0;
 static uint8_t RGB_data_DMA_buffer[64 + NUM_LED * 24 + 64] = {WS2812_HIGH + WS2812_LOW};
 static uint8_t Air_RGB_data[3 * AIR_NUM_LED] = {0xff};
 static uint8_t Air_RGB_data_DMA_buffer[AIR_NUM_LED * 24 + 64 + 64] = {WS2812_HIGH + WS2812_LOW};
@@ -81,6 +82,7 @@ void Air_LED_set(uint8_t led_no,uint8_t r,uint8_t g,uint8_t b){
 	Air_RGB_data[led_no * 3] = r;
 	Air_RGB_data[led_no * 3 + 1] = g;
 	Air_RGB_data[led_no * 3 + 2] = b;
+	Air_LED_Refresh_Flag = 1;
 }
 
 void Ground_LED_refresh()
@@ -135,6 +137,7 @@ void TIM3_Set_800K(void)
 
 void Air_LED_refresh()
 {
+	if(!Air_LED_Refresh_Flag)return;
 	TIM3_Set_800K();
 //	Air_RGB_data_DMA_buffer[63] = 10;
 	Air_Select_Channel(AIR_LED_CHANNEL);
