@@ -68,10 +68,10 @@ void slider_init(){
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-//	if(HAL_GPIO_ReadPin(GPIOA,GPIO_PIN_13)){
-//	}else{
+	if(HAL_GPIO_ReadPin(GPIOA,GPIO_PIN_13)){
+	}else{
 		memcpy(touch_sheet,touch_sheet_B,32);
-//	}
+	}
 	for(uint8_t i = 0;i<32;i++){
 		slider_status[i] = 0;
 	}
