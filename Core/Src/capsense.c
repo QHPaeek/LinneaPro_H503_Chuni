@@ -16,6 +16,7 @@
 #define CAPSENSE_LOW_BASELINE_DURATION_A 20
 #define CAPSENSE_LOW_BASELINE_DURATION_B 400
 #define CAPSENSE_BSLN_SENS_FACTOR 0.03
+#define CAPSENSE_BSLN_LIMIT_RATIO 0.3
 
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
@@ -58,6 +59,7 @@ uint8_t capsense_image[4][32];
 uint8_t capsense_image_index[4][32];
 uint8_t capsense_tap_flag[128];
 uint8_t capsense_blind_flag[128];
+float capsense_baseline_limit[128];
 
 extern EEPROM_DATA_t g_eeprom;
 
@@ -195,6 +197,7 @@ void capsense_init()
 	}
 
 	for(uint8_t i = 0;i<128;i++){
+		capsense_baseline_limit[i] = 0;
 		capsense_threshold[i] = 400;
 		capsense_minimum[i] = 0xffff;
 		capsense_low_bsln_flag[i] = 0;
@@ -246,6 +249,9 @@ void capsense_init()
 			}
 			capsense_data_ready = 0;
 		}
+    }
+    for(uint8_t i = 0;i<128;i++){
+    	capsense_baseline_limit[i] = (capsense_maxmium[i] - capsense_minimum[i]) * CAPSENSE_BSLN_LIMIT_RATIO + capsense_minimum[i];
     }
 }
 
@@ -349,9 +355,11 @@ void capsense_poll(){
 		uint16_t raw = Touch.channel_raw[i];
 		if(capsense_minimum[i] > raw){
 			capsense_minimum[i] = raw;
+			capsense_baseline_limit[i] = (capsense_maxmium[i] - capsense_minimum[i]) * CAPSENSE_BSLN_LIMIT_RATIO + capsense_minimum[i];
 		}
 		if(capsense_maxmium[i] < raw){
 			capsense_maxmium[i] = raw;
+			capsense_baseline_limit[i] = (capsense_maxmium[i] - capsense_minimum[i]) * CAPSENSE_BSLN_LIMIT_RATIO + capsense_minimum[i];
 			capsense_sava_flag[i] = 1;
 		}
 		float threshold = (capsense_maxmium[i] - capsense_minimum[i]) * 0.1f;
@@ -391,6 +399,9 @@ void capsense_poll(){
 				capsense_baseline[i] = (capsense_baseline[i] * (1-CAPSENSE_BSLN_SENS_FACTOR)) + (raw * CAPSENSE_BSLN_SENS_FACTOR);
 //				capsense_minimum[i] = Touch.channel_raw[i];
 			}
+		}
+		if(capsense_baseline[i] > capsense_baseline_limit[i]){
+			capsense_baseline[i] = capsense_baseline_limit[i];
 		}
 //		if(capsense_baseline[i] < (Touch.channel_raw[i] - capsense_threshold[i])){
 //			if(capsense_low_bsln_flag > 2){
