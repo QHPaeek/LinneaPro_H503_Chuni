@@ -45,6 +45,7 @@ uint8_t capsense_data_ready = 0;
 //uint8_t capsense_bit;
 uint8_t capsense_touch_status[128];
 uint16_t capsense_minimum[128];
+uint8_t capsense_low_minimum_flag[128];
 uint8_t capsense_low_bsln_flag[128];
 uint16_t capsense_maxmium[128];
 uint8_t capsense_sava_flag[128];
@@ -60,6 +61,7 @@ uint8_t capsense_image_index[4][32];
 uint8_t capsense_tap_flag[128];
 uint8_t capsense_blind_flag[128];
 float capsense_baseline_limit[128];
+uint16_t min_buffer[128][5];
 
 extern EEPROM_DATA_t g_eeprom;
 
@@ -200,6 +202,7 @@ void capsense_init()
 		capsense_baseline_limit[i] = 0;
 		capsense_threshold[i] = 400;
 		capsense_minimum[i] = 0xffff;
+		capsense_low_minimum_flag[i] = 0;
 		capsense_low_bsln_flag[i] = 0;
 		capsense_baseline[i] = 0xffff;
 		capsense_sava_flag[i] = 0;
@@ -209,6 +212,9 @@ void capsense_init()
 		capsense_history[2][i] = 0;
 		capsense_tap_flag[i] = 0;
 		capsense_blind_flag[i] = 0;
+		for(uint8_t j = 0;j<5;j++){
+			min_buffer[i][j] = 0xffff;
+		}
 	}
 
     for(uint8_t i=0;i<10;i++){
@@ -233,21 +239,39 @@ void capsense_init()
 			}
 			capsense_data_ready = 0;
 		}
-    }else{
+    }else{;
 		for(uint8_t j = 0;j<100;j++){
 			while(capsense_data_ready != 0xf);
 			for(uint8_t i = 0;i<128;i++){
 //				uint16_t raw = capsense_history[capsense_history_tail][i];
 				uint16_t raw = Touch.channel_raw[i];
-				if(capsense_minimum[i] > raw){
-					capsense_minimum[i] = raw;
-				}
+		        uint8_t max_min_index = 0;
+		        for(uint8_t k = 1; k < 5; k++){
+		            if(min_buffer[i][k] > min_buffer[i][max_min_index]){
+		                max_min_index = k;
+		            }
+		        }
+		        // 如果当前值比 5 个最低值里的最大值还要小，说明它属于前 5 低的脏数据
+		        if(raw < min_buffer[i][max_min_index]){
+		            min_buffer[i][max_min_index] = raw; // 替换掉 5 个最低值中较大的那个
+		        }
+		        // 如果当前值大于这 5 个最低值，说明它是“第 6 低”或更高的有效数值
+		        else{
+		            if(capsense_minimum[i] > raw){
+		                capsense_minimum[i] = raw; // 取倒数第 6 低的数值（即有效数据中的最小值）
+		            }
+		        }
 				if(capsense_maxmium[i] < raw){
 					capsense_maxmium[i] = raw;
 					capsense_sava_flag[i] = 1;
 				}
 			}
 			capsense_data_ready = 0;
+		}
+		for(uint8_t i = 0;i<128;i++){
+			if(capsense_maxmium[i] < capsense_minimum[i] + 2000){
+				capsense_maxmium[i] = capsense_minimum[i] + 2000;
+			}
 		}
     }
     for(uint8_t i = 0;i<128;i++){
@@ -354,8 +378,15 @@ void capsense_poll(){
 //		uint16_t raw = capsense_history[capsense_history_tail][i];
 		uint16_t raw = Touch.channel_raw[i];
 		if(capsense_minimum[i] > raw){
-			capsense_minimum[i] = raw;
-			capsense_baseline_limit[i] = (capsense_maxmium[i] - capsense_minimum[i]) * CAPSENSE_BSLN_LIMIT_RATIO + capsense_minimum[i];
+			if(capsense_low_minimum_flag[i] < 3){
+				capsense_low_minimum_flag[i] ++;
+			}else{
+				capsense_minimum[i] = raw;
+				capsense_baseline_limit[i] = (capsense_maxmium[i] - capsense_minimum[i]) * CAPSENSE_BSLN_LIMIT_RATIO + capsense_minimum[i];
+			}
+
+		}else{
+			capsense_low_minimum_flag[i] = 0;
 		}
 		if(capsense_maxmium[i] < raw){
 			capsense_maxmium[i] = raw;
