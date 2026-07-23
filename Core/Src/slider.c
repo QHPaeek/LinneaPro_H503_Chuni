@@ -111,7 +111,7 @@ void slider_poll(){
 		}
 		else{
 			for(uint8_t i = 0;i<16;i++){
-				if((slider_transfer_buf[2*i+3] > 60) || (slider_transfer_buf[2*i+4] > 60)){
+				if((slider_transfer_buf[2*i+3] > 40) || (slider_transfer_buf[2*i+4] > 40)){
 					Ground_LED_set(2*i,255,0,128);
 				}else{
 					Ground_LED_set(2*i,0,0,128);

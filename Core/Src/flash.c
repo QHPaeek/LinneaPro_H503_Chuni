@@ -91,7 +91,7 @@ static uint32_t GetBank(uint32_t Addr)
  * 擦除EEPROM Sector
  ************************************************/
 
-static HAL_StatusTypeDef EEPROM_EraseSector(void)
+HAL_StatusTypeDef EEPROM_EraseSector(void)
 {
     FLASH_EraseInitTypeDef erase;
 

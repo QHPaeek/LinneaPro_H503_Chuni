@@ -202,12 +202,15 @@ void StartTask02(void *argument)
 void StartTask03(void *argument)
 {
   /* USER CODE BEGIN Task03 */
-
   /* Infinite loop */
   for(;;)
   {
-	  App_EEPROM_Save();
-    osDelay(1000);
+	  if(!Ground_LED_is_all_off() && sys_mode.Game_Mode == 1){
+
+	  }else{
+		  App_EEPROM_Save();
+	  }
+    osDelay(100);
   }
   /* USER CODE END Task03 */
 }

@@ -214,3 +214,9 @@ void Ground_LED_show(uint8_t r,uint8_t g,uint8_t b){
 	Ground_LED_refresh();
 }
 
+uint8_t Ground_LED_is_all_off(){
+	for(uint16_t i = 0;i < 3 * NUM_LED;i++){
+		if(RGB_data[i])return 0;
+	}
+	return 1;
+}

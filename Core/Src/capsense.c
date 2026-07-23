@@ -68,6 +68,12 @@ uint16_t min_buffer[128][5];
 
 extern EEPROM_DATA_t g_eeprom;
 
+void Capsense_Maxmium_Clear(){
+	for(uint8_t i = 0;i<128;i++){
+		capsense_maxmium[i] = 0;
+	}
+	EEPROM_EraseSector();
+}
 void Capsense_Reset(){
 	Capsense_Power_Off;
 	osDelay(100);
@@ -396,7 +402,7 @@ void capsense_poll(){
 		}else{
 			capsense_low_minimum_flag[i] = 0;
 		}
-		if(capsense_maxmium[i] < raw){
+		if(capsense_maxmium[i] < raw - 100){
 			capsense_maxmium[i] = raw;
 			capsense_baseline_limit[i] = (capsense_maxmium[i] - capsense_minimum[i]) * CAPSENSE_BSLN_LIMIT_RATIO + capsense_minimum[i];
 			capsense_sava_flag[i] = 1;
@@ -465,7 +471,7 @@ void capsense_poll(){
 //		}
 //		if(capsense_baseline[i] > 60000)capsense_baseline[i] = 60000;
 //		if(capsense_baseline[i] < capsense_minimum[i])capsense_baseline[i] = capsense_minimum[i];
-		float judge =(raw > capsense_baseline[i]) ? ((float)(raw - capsense_baseline[i])) / (((float)(capsense_maxmium[i] - capsense_minimum[i])) / 255.0f) : 0.0f;
+		float judge = (raw > capsense_baseline[i]) ? ((float)(raw - capsense_baseline[i])) / (((float)(capsense_maxmium[i] - capsense_minimum[i])) / 255.0f) * 3: 0.0f;
 		capsense_touch_status[i] = judge > 254 ? 254 : judge;
 	}
 	//Flash_Save(&Flash);
