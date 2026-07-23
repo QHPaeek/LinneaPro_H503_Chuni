@@ -71,7 +71,6 @@ extern DMA_QListTypeDef List_GPDMA1_Channel2;
 extern DMA_HandleTypeDef handle_GPDMA1_Channel2;
 extern UART_HandleTypeDef hlpuart1;
 extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
 extern DMA_HandleTypeDef handle_GPDMA2_Channel1;
 extern DMA_HandleTypeDef handle_GPDMA2_Channel7;
@@ -362,29 +361,6 @@ void USART1_IRQHandler(void)
   /* USER CODE BEGIN USART1_IRQn 1 */
 
   /* USER CODE END USART1_IRQn 1 */
-}
-
-/**
-  * @brief This function handles USART2 global interrupt.
-  */
-void USART2_IRQHandler(void)
-{
-  /* USER CODE BEGIN USART2_IRQn 0 */
-//	if(__HAL_UART_GET_FLAG(&huart2, UART_FLAG_IDLE)){
-//		__HAL_UART_CLEAR_IDLEFLAG(&huart2);
-//		HAL_UART_DMAStop(&huart2);
-//        if((uart_dma_buffer[0] == 0) && (uart_dma_buffer[1] == 0)){
-//        	memcpy(Touch.data,uart_dma_buffer,66);
-//        }
-//        __HAL_UART_ENABLE_IT(&huart2, UART_IT_IDLE);
-//		HAL_UART_Receive_DMA(&huart2,uart_dma_buffer,66);
-//		__HAL_DMA_DISABLE_IT(&handle_GPDMA1_Channel0, DMA_IT_HT);
-//	}
-  /* USER CODE END USART2_IRQn 0 */
-  HAL_UART_IRQHandler(&huart2);
-  /* USER CODE BEGIN USART2_IRQn 1 */
-
-  /* USER CODE END USART2_IRQn 1 */
 }
 
 /**

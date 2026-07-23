@@ -3,8 +3,9 @@
 #include "stdbool.h"
 #include "air_string.h"
 #include "system_mode.h"
+#include "gpio.h"
 
-#define NUM_LED 31
+#define NUM_LED 47
 #define AIR_NUM_LED 16
 #define WS2812_HIGH 200
 #define WS2812_LOW 90
@@ -22,6 +23,7 @@ extern uint8_t rxData[128];
 extern uint32_t rxLen;
 
 bool Air_LED_flag = false;
+uint8_t LED_Merge_flag = 1;
 
 const uint8_t gamma8[256] = {
   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,
@@ -61,27 +63,53 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 }
 
 void LED_init(){
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitStruct.Pin = GPIO_PIN_10;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+	osDelay(100);
+	LED_Merge_flag = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10);
 	memset(RGB_data_DMA_buffer,0,64 + NUM_LED * 24 + 64);
 	memset(Air_RGB_data_DMA_buffer,0,AIR_NUM_LED * 24 + 64 + 64);
 	Air_Select_Channel(7);
 }
 
-void Ground_LED_set(uint8_t led_no,uint8_t r,uint8_t g,uint8_t b){
-	if(led_no >= NUM_LED){
+void Ground_LED_set(uint8_t led_idx,uint8_t r,uint8_t g,uint8_t b){
+	if(led_idx >= 31){
 		return;
 	}
-	RGB_data[led_no * 3] = r;
-	RGB_data[led_no * 3 + 1] = g;
-	RGB_data[led_no * 3 + 2] = b;
+	if(LED_Merge_flag){
+		RGB_data[led_idx * 3] = r;
+		RGB_data[led_idx * 3 + 1] = g;
+		RGB_data[led_idx * 3 + 2] = b;
+	}else{
+	   if (led_idx % 2 == 0){
+		   uint8_t _led_idx = led_idx / 2 * 3;
+			RGB_data[_led_idx * 3] = r;
+			RGB_data[_led_idx * 3 + 1] = g;
+			RGB_data[_led_idx * 3 + 2] = b;
+			_led_idx++;
+			RGB_data[_led_idx * 3] = r;
+			RGB_data[_led_idx * 3 + 1] = g;
+			RGB_data[_led_idx * 3 + 2] = b;
+		}else{
+			uint8_t _led_idx = (led_idx + 1) / 2 * 3 - 1;
+			RGB_data[_led_idx * 3] = r;
+			RGB_data[_led_idx * 3 + 1] = g;
+			RGB_data[_led_idx * 3 + 2] = b;
+		}
+	}
+
 }
 
-void Air_LED_set(uint8_t led_no,uint8_t r,uint8_t g,uint8_t b){
-	if(led_no >= AIR_NUM_LED){
+void Air_LED_set(uint8_t led_idx,uint8_t r,uint8_t g,uint8_t b){
+	if(led_idx >= AIR_NUM_LED){
 		return;
 	}
-	Air_RGB_data[led_no * 3] = r;
-	Air_RGB_data[led_no * 3 + 1] = g;
-	Air_RGB_data[led_no * 3 + 2] = b;
+	Air_RGB_data[led_idx * 3] = r;
+	Air_RGB_data[led_idx * 3 + 1] = g;
+	Air_RGB_data[led_idx * 3 + 2] = b;
 	Air_LED_Refresh_Flag = 1;
 }
 

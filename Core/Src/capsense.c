@@ -11,6 +11,9 @@
 #include <math.h>
 #include "flash.h"
 
+#define Capsense_Power_On HAL_GPIO_WritePin(GPIOA,GPIO_PIN_15,1)
+#define Capsense_Power_Off HAL_GPIO_WritePin(GPIOA,GPIO_PIN_15,0)
+
 #define UART_FRAME_LEN 66
 #define CAPSENSE_BASELINE_VARIANCE 255
 #define CAPSENSE_LOW_BASELINE_DURATION_A 20
@@ -65,6 +68,11 @@ uint16_t min_buffer[128][5];
 
 extern EEPROM_DATA_t g_eeprom;
 
+void Capsense_Reset(){
+	Capsense_Power_Off;
+	osDelay(100);
+	Capsense_Power_On;
+}
 bool check_sum(uint8_t* data){
 	uint8_t checksum = 0;
 	for(uint8_t i = 1;i<65;i++){
@@ -157,7 +165,6 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
-	HAL_Delay(1);
     HAL_UART_DMAStop(huart);
     __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_FEF | UART_CLEAR_NEF | UART_CLEAR_OREF | UART_CLEAR_PEF);
 
@@ -216,6 +223,7 @@ void capsense_init()
 			min_buffer[i][j] = 0xffff;
 		}
 	}
+	Capsense_Reset();
 
     for(uint8_t i=0;i<10;i++){
     	while(capsense_data_ready != 0xf){
@@ -269,8 +277,8 @@ void capsense_init()
 			capsense_data_ready = 0;
 		}
 		for(uint8_t i = 0;i<128;i++){
-			if(capsense_maxmium[i] < capsense_minimum[i] + 2000){
-				capsense_maxmium[i] = capsense_minimum[i] + 2000;
+			if(capsense_maxmium[i] < capsense_minimum[i] + 500){
+				capsense_maxmium[i] = capsense_minimum[i] + 500;
 			}
 		}
     }
